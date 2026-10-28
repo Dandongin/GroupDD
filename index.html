@@ -537,9 +537,9 @@ button.tm-btn:hover{background:#fff6b8;}
         <button type="button" onclick="showRidingMonthlyStats()">🚴 라이딩 당월</button>
         <button type="button" onclick="showRidingStats()">🚴 라이딩 월별</button>
         <button type="button" onclick="downloadMonthlyStatsImageDirect()">🖼️ 월 통계 이미지</button>
-        <button type="button" onclick="triggerMonthlyExcelDownload()">🟩 월 통계 엑셀</button>
         <button type="button" onclick="downloadMonthlyStatsImageDirect('zh')">🖼️ 月 统计 中文</button>
-        <button type="button" onclick="triggerMonthlyExcelDownload('zh')">🟩 月 统计 Excel</button>
+        <button type="button" onclick="triggerMonthlyExcelDownload()">🟩 월 통계 엑셀</button>
+        <button type="button" onclick="triggerMonthlyExcelDownload('zh')">🟩 月 统计 Excel 中文</button>
         <button type="button" onclick="showCostSumStats()">💰 Cost Sum</button>
         <button type="button" onclick="showNameVerifierModal()">🔍 명단 검증기</button>
         <button type="button" onclick="triggerStatsOrganizeExcelDownload()">📗 수대리 작업용</button>
@@ -3587,11 +3587,19 @@ function buildMonthlyRichWorkbook(data, lang){
     const lines = [];
     let cur = [];
     let curText = "";
-    g.names.forEach((raw, i) => {
+    // 한국 단체(K)를 먼저, 중국 단체(C)는 아래 줄로 분리 (각 그룹 안의 순서는 기존 그대로)
+    const rank = (o) => o === "K" ? 0 : (o === "C" ? 1 : 2);
+    const ordered = g.names
+      .map((raw, i) => ({ raw, o: (g.origins || [])[i], i }))
+      .sort((a, b) => rank(a.o) - rank(b.o) || a.i - b.i);
+    let prevO = null;
+    ordered.forEach(({ raw, o }) => {
       const nm = isZh ? raw.replace(/(\d+)명$/, "$1人") : raw;
       const cand = curText ? curText + ", " + nm : nm;
-      const item = { nm, o: (g.origins || [])[i] };
-      if (curText && getVisualWidth(cand) > maxChars) {
+      const item = { nm, o };
+      const originChanged = prevO !== null && o !== prevO;
+      prevO = o;
+      if (curText && (getVisualWidth(cand) > maxChars || originChanged)) {
         lines.push(cur);
         cur = [item];
         curText = nm;
@@ -3635,10 +3643,14 @@ function buildMonthlyRichWorkbook(data, lang){
 
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(isZh ? "月度团体情况" : "월별단체현황");
-  ws.columns = [
-    { width: 13 }, { width: 45 }, { width: 8 }, { width: 10 },
-    { width: 13 }, { width: 45 }, { width: 8 }, { width: 10 }
-  ];
+  // 중국어판: 날짜|단체|한국·중국|총인원 (8열) / 한국어판: 날짜|단체|총인원 (6열) + 맨 아래 한국·중국 총 인원 한 줄
+  const hasKC = isZh;
+  const nc = hasKC ? 8 : 6;
+  const half = nc / 2;
+  const totCol = hasKC ? 4 : 3;
+  ws.columns = hasKC
+    ? [{ width: 13 }, { width: 45 }, { width: 8 }, { width: 10 }, { width: 13 }, { width: 45 }, { width: 8 }, { width: 10 }]
+    : [{ width: 13 }, { width: 45 }, { width: 10 }, { width: 13 }, { width: 45 }, { width: 10 }];
   ws.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
 
   const thin = { style: "thin", color: { argb: "FF000000" } };
@@ -3648,7 +3660,7 @@ function buildMonthlyRichWorkbook(data, lang){
   const leftAlign = { horizontal: "left", vertical: "middle", wrapText: true };
 
   const styleRow = (r, opts) => {
-    for (let c = 1; c <= 8; c++) {
+    for (let c = 1; c <= nc; c++) {
       const cell = ws.getCell(r, c);
       cell.border = border;
       cell.alignment = (opts.leftCols && opts.leftCols.includes(c)) ? leftAlign : center;
@@ -3660,7 +3672,7 @@ function buildMonthlyRichWorkbook(data, lang){
 
   // 1행: 제목
   styleRow(1, { font: { bold: true, size: 16 }, fill: "FFE2EFDA" });
-  ws.mergeCells(1, 1, 1, 8);
+  ws.mergeCells(1, 1, 1, nc);
   ws.getCell(1, 1).value = `${titleText} ${isZh ? "团体运营情况" : "단체 운항 현황"}`;
   ws.getRow(1).height = 28;
 
@@ -3668,7 +3680,7 @@ function buildMonthlyRichWorkbook(data, lang){
   styleRow(2, { font: { bold: true }, fill: "FFF2F2F2" });
   const headers = isZh
     ? ["日期", "出港 OUT", kcHeader, "总人数", "日期", "入港 IN", kcHeader, "总人数"]
-    : ["날짜", "OUT", kcHeader, "총인원", "날짜", "IN", kcHeader, "총인원"];
+    : ["날짜", "OUT", "총인원", "날짜", "IN", "총인원"];
   headers.forEach((v, i) => { ws.getCell(2, i + 1).value = v; });
   setHeight(2, 2);
 
@@ -3686,35 +3698,59 @@ function buildMonthlyRichWorkbook(data, lang){
     if (lg) { outSum += lg.total; outK += ls.k; outC += ls.c; }
     if (rg) { inSum += rg.total; inK += rs.k; inC += rs.c; }
 
-    styleRow(r, { leftCols: [2, 6] });
+    styleRow(r, { leftCols: [2, half + 2] });
 
     const ln = namesRich(lg);
     const rn = namesRich(rg);
-    if (lDate) ws.getCell(r, 1).value = dateText(lDate);
-    if (ln.runs) ws.getCell(r, 2).value = { richText: ln.runs };
-    if (lg) { ws.getCell(r, 3).value = kcRich(ls.k, ls.c); ws.getCell(r, 4).value = lg.total; }
-    if (rDate) ws.getCell(r, 5).value = dateText(rDate);
-    if (rn.runs) ws.getCell(r, 6).value = { richText: rn.runs };
-    if (rg) { ws.getCell(r, 7).value = kcRich(rs.k, rs.c); ws.getCell(r, 8).value = rg.total; }
+    const putSide = (off, dateStr, g, gs, nm) => {
+      if (dateStr) ws.getCell(r, off + 1).value = dateText(dateStr);
+      if (nm.runs) ws.getCell(r, off + 2).value = { richText: nm.runs };
+      if (g) {
+        if (hasKC) ws.getCell(r, off + 3).value = kcRich(gs.k, gs.c);
+        ws.getCell(r, off + totCol).value = g.total;
+      }
+    };
+    putSide(0, lDate, lg, ls, ln);
+    putSide(half, rDate, rg, rs, rn);
 
-    setHeight(r, Math.max(ln.lineCount, rn.lineCount, (lg || rg) ? 2 : 1));
+    setHeight(r, Math.max(ln.lineCount, rn.lineCount, (hasKC && (lg || rg)) ? 2 : 1));
   }
 
   // 합계 행
   const totalRow = 3 + maxRows;
   styleRow(totalRow, { font: { bold: true }, fill: "FFFFF2CC" });
-  ws.getCell(totalRow, 2).value = isZh ? "总计" : "총 합계";
-  ws.getCell(totalRow, 3).value = kcRich(outK, outC);
-  ws.getCell(totalRow, 4).value = outSum;
-  ws.getCell(totalRow, 6).value = isZh ? "总计" : "총 합계";
-  ws.getCell(totalRow, 7).value = kcRich(inK, inC);
-  ws.getCell(totalRow, 8).value = inSum;
-  setHeight(totalRow, 2);
+  const totLabel = isZh ? "总计" : "총 합계";
+  ws.getCell(totalRow, 2).value = totLabel;
+  ws.getCell(totalRow, half + 2).value = totLabel;
+  if (hasKC) {
+    ws.getCell(totalRow, 3).value = kcRich(outK, outC);
+    ws.getCell(totalRow, half + 3).value = kcRich(inK, inC);
+  }
+  ws.getCell(totalRow, totCol).value = outSum;
+  ws.getCell(totalRow, half + totCol).value = inSum;
+  setHeight(totalRow, hasKC ? 2 : 1);
+
+  // 한국어판: 맨 아래에 한국/중국 총 인원만 간략히 (좌: OUT, 우: IN)
+  let lastRow = totalRow;
+  if (!hasKC) {
+    lastRow = totalRow + 1;
+    styleRow(lastRow, { font: { bold: true }, fill: "FFFFF2CC" });
+    const kcLine = (k, c) => ({ richText: [
+      { text: `한국 ${k}명`, font: runFont(KR, true) },
+      { text: " / ", font: runFont(null, true) },
+      { text: `중국 ${c}명`, font: runFont(CN, true) }
+    ] });
+    ws.mergeCells(lastRow, 1, lastRow, half);
+    ws.mergeCells(lastRow, half + 1, lastRow, nc);
+    ws.getCell(lastRow, 1).value = kcLine(outK, outC);
+    ws.getCell(lastRow, half + 1).value = kcLine(inK, inC);
+    setHeight(lastRow, 1);
+  }
 
   // 안내 문구 행
-  const noteRow = totalRow + 1;
+  const noteRow = lastRow + 1;
   styleRow(noteRow, { font: { bold: true, size: 11, color: { argb: "FFD32F2F" } } });
-  ws.mergeCells(noteRow, 1, noteRow, 8);
+  ws.mergeCells(noteRow, 1, noteRow, nc);
   ws.getCell(noteRow, 1).value = isZh
     ? "* 以上预订情况仍在招募中，人数可能会有较大变动。"
     : "* 위 예약상황은 모객 중이므로 인원이 많이 변동될 수 있습니다.";
@@ -3778,21 +3814,30 @@ function buildStatsTableHtmlKC(data, lang){
 
   const dateHtml = (dateStr) => {
     if (!dateStr) return "";
+    if (!isZh) return esc(formatDateMDShort(dateStr));
     const d = new Date(dateStr);
-    return `${d.getMonth() + 1}-${d.getDate()}<br>(${(isZh ? WEEKDAYS_ZH : WEEKDAYS_KR)[d.getDay()]})`;
+    return `${d.getMonth() + 1}-${d.getDate()}<br>(${WEEKDAYS_ZH[d.getDay()]})`;
   };
 
   // formatGroupNames 와 같은 줄바꿈 규칙 + 단체마다 한국/중국 색상 span
-  const namesHtml = (g, maxChars = 31) => {
+  const namesHtml = (g, maxChars = isZh ? 31 : 40) => {
     if (!g || !g.names || g.names.length === 0) return "";
     const lines = [];
     let cur = [];
     let curText = "";
-    g.names.forEach((raw, i) => {
+    // 한국 단체(K)를 먼저, 중국 단체(C)는 아래 줄로 분리 (각 그룹 안의 순서는 기존 그대로)
+    const rank = (o) => o === "K" ? 0 : (o === "C" ? 1 : 2);
+    const ordered = g.names
+      .map((raw, i) => ({ raw, o: (g.origins || [])[i], i }))
+      .sort((a, b) => rank(a.o) - rank(b.o) || a.i - b.i);
+    let prevO = null;
+    ordered.forEach(({ raw, o }) => {
       const nm = isZh ? raw.replace(/(\d+)명$/, "$1人") : raw;
       const cand = curText ? curText + ", " + nm : nm;
-      const item = { nm, o: (g.origins || [])[i] };
-      if (curText && getVisualWidth(cand) > maxChars) {
+      const item = { nm, o };
+      const originChanged = prevO !== null && o !== prevO;
+      prevO = o;
+      if (curText && (getVisualWidth(cand) > maxChars || originChanged)) {
         lines.push(cur);
         cur = [item];
         curText = nm;
@@ -3833,11 +3878,11 @@ function buildStatsTableHtmlKC(data, lang){
     rows += `<tr>
       <td class="a4-col-date">${dateHtml(lDate)}</td>
       <td class="a4-col-names">${namesHtml(lg)}</td>
-      <td class="a4-col-total">${lg ? kcHtml(ls.k, ls.c) : ""}</td>
+      ${isZh ? `<td class="a4-col-total">${lg ? kcHtml(ls.k, ls.c) : ""}</td>` : ""}
       <td class="a4-col-total">${lg ? lg.total : ""}</td>
       <td class="a4-col-date">${dateHtml(rDate)}</td>
       <td class="a4-col-names">${namesHtml(rg)}</td>
-      <td class="a4-col-total">${rg ? kcHtml(rs.k, rs.c) : ""}</td>
+      ${isZh ? `<td class="a4-col-total">${rg ? kcHtml(rs.k, rs.c) : ""}</td>` : ""}
       <td class="a4-col-total">${rg ? rg.total : ""}</td>
     </tr>`;
   }
@@ -3845,13 +3890,23 @@ function buildStatsTableHtmlKC(data, lang){
   rows += `<tr style="font-weight:bold; background:#fff2cc;">
     <td class="a4-col-date"></td>
     <td class="a4-col-names">${isZh ? "总计" : "총 합계"}</td>
-    <td class="a4-col-total">${kcHtml(outK, outC)}</td>
+    ${isZh ? `<td class="a4-col-total">${kcHtml(outK, outC)}</td>` : ""}
     <td class="a4-col-total">${outSum}</td>
     <td class="a4-col-date"></td>
     <td class="a4-col-names">${isZh ? "总计" : "총 합계"}</td>
-    <td class="a4-col-total">${kcHtml(inK, inC)}</td>
+    ${isZh ? `<td class="a4-col-total">${kcHtml(inK, inC)}</td>` : ""}
     <td class="a4-col-total">${inSum}</td>
   </tr>`;
+
+  // 한국어판: 열 대신 맨 아래에 한국/중국 총 인원만 간략히 표시
+  if (!isZh) {
+    const kcLine = (k, c) =>
+      `<span style="color:${KR};font-weight:bold;">한국 ${k}명</span> / <span style="color:${CN};font-weight:bold;">중국 ${c}명</span>`;
+    rows += `<tr style="background:#fff2cc;">
+    <td colspan="3" style="text-align:center;">${kcLine(outK, outC)}</td>
+    <td colspan="3" style="text-align:center;">${kcLine(inK, inC)}</td>
+  </tr>`;
+  }
 
   const kcTh = `<th><span style="color:${KR};">${isZh ? "韩国" : "한국"}</span><br><span style="color:${CN};">${isZh ? "中国" : "중국"}</span></th>`;
 
@@ -3859,12 +3914,14 @@ function buildStatsTableHtmlKC(data, lang){
     <div class="a4-title">${esc(titleText)} ${isZh ? "团体运营情况" : "단체 운항 현황"}</div>
     <table class="a4-stats-table">
       <colgroup>
-        <col style="width:6.5%"><col style="width:29.5%"><col style="width:6.5%"><col style="width:7.5%">
-        <col style="width:6.5%"><col style="width:29.5%"><col style="width:6.5%"><col style="width:7.5%">
+        ${isZh ? `<col style="width:6.5%"><col style="width:29.5%"><col style="width:6.5%"><col style="width:7.5%">
+        <col style="width:6.5%"><col style="width:29.5%"><col style="width:6.5%"><col style="width:7.5%">`
+        : `<col style="width:10%"><col style="width:33%"><col style="width:7%">
+        <col style="width:10%"><col style="width:33%"><col style="width:7%">`}
       </colgroup>
       <thead><tr>${isZh
         ? `<th>日期</th><th>出港 OUT</th>${kcTh}<th>总人数</th><th>日期</th><th>入港 IN</th>${kcTh}<th>总人数</th>`
-        : `<th>날짜</th><th>OUT</th>${kcTh}<th>총인원</th><th>날짜</th><th>IN</th>${kcTh}<th>총인원</th>`}</tr></thead>
+        : `<th>날짜</th><th>OUT</th><th>총인원</th><th>날짜</th><th>IN</th><th>총인원</th>`}</tr></thead>
       <tbody>${rows}</tbody>
     </table>
     <div class="a4-note">${isZh ? "* 以上预订情况仍在招募中，人数可能会有较大变动。" : "* 위 예약상황은 모객 중이므로 인원이 많이 변동될 수 있습니다."}</div>
