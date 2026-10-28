@@ -537,6 +537,7 @@ button.tm-btn:hover{background:#fff6b8;}
         <button type="button" onclick="showRidingMonthlyStats()">🚴 라이딩 당월</button>
         <button type="button" onclick="showRidingStats()">🚴 라이딩 월별</button>
         <button type="button" onclick="downloadMonthlyStatsImageDirect()">🖼️ 월 통계 이미지</button>
+        <button type="button" onclick="downloadMonthlyStatsImageDirect('zh')">🖼️ 월 통계 이미지 (중국어)</button>
         <button type="button" onclick="triggerMonthlyExcelDownload()">🟩 월 통계 엑셀</button>
         <button type="button" onclick="showCostSumStats()">💰 Cost Sum</button>
         <button type="button" onclick="showNameVerifierModal()">🔍 명단 검증기</button>
@@ -3537,8 +3538,22 @@ function downloadMonthlyExcel(year, month){
 }
 
 // computeMonthlyGroupData 결과로 A4 세로 1장용 미리보기 테이블 HTML 생성
-function buildStatsTableHtml(data){
-  const { titleText, leftDates, rightDates, outGroups, maxRows } = data;
+const WEEKDAYS_ZH = ['周日','周一','周二','周三','周四','周五','周六'];
+function formatDateMDShortZh(dateStr){
+  if(!dateStr) return "";
+  const d = new Date(dateStr);
+  return `${d.getMonth() + 1}-${d.getDate()}(${WEEKDAYS_ZH[d.getDay()]})`;
+}
+
+function buildStatsTableHtml(data, lang){
+  const isZh = (lang === "zh");
+  let { titleText, leftDates, rightDates, outGroups, maxRows } = data;
+  if (isZh) {
+    const _t = new Date();
+    titleText = `${data.year}年${data.month}月 (截至${_t.getMonth() + 1}/${_t.getDate()})`;
+  }
+  const fmtDate = isZh ? formatDateMDShortZh : formatDateMDShort;
+  const fmtNames = (names) => formatGroupNames(isZh ? names.map(n => n.replace(/(\d+)명$/, "$1人")) : names);
 
   let rows = "";
   let outSum = 0;
@@ -3548,12 +3563,12 @@ function buildStatsTableHtml(data){
     const lDate = leftDates[i] || "";
     const rDate = rightDates[i] || "";
 
-    const lDateDisp = lDate ? formatDateMDShort(lDate) : "";
-    const lNamesDisp = (lDate && outGroups[lDate]) ? formatGroupNames(outGroups[lDate].names) : "";
+    const lDateDisp = lDate ? fmtDate(lDate) : "";
+    const lNamesDisp = (lDate && outGroups[lDate]) ? fmtNames(outGroups[lDate].names) : "";
     const lTotalDisp = (lDate && outGroups[lDate]) ? outGroups[lDate].total : "";
 
-    const rDateDisp = rDate ? formatDateMDShort(rDate) : "";
-    const rNamesDisp = (rDate && outGroups[rDate]) ? formatGroupNames(outGroups[rDate].names) : "";
+    const rDateDisp = rDate ? fmtDate(rDate) : "";
+    const rNamesDisp = (rDate && outGroups[rDate]) ? fmtNames(outGroups[rDate].names) : "";
     const rTotalDisp = (rDate && outGroups[rDate]) ? outGroups[rDate].total : "";
 
     if (lTotalDisp !== "") outSum += lTotalDisp;
@@ -3571,24 +3586,24 @@ function buildStatsTableHtml(data){
 
   rows += `<tr style="font-weight:bold; background:#fff2cc;">
     <td class="a4-col-date"></td>
-    <td class="a4-col-names">총 합계</td>
+    <td class="a4-col-names">${isZh ? "总计" : "총 합계"}</td>
     <td class="a4-col-total">${outSum}</td>
     <td class="a4-col-date"></td>
-    <td class="a4-col-names">총 합계</td>
+    <td class="a4-col-names">${isZh ? "总计" : "총 합계"}</td>
     <td class="a4-col-total">${inSum}</td>
   </tr>`;
 
   return `
-    <div class="a4-title">${esc(titleText)} 단체 운항 현황</div>
+    <div class="a4-title">${esc(titleText)} ${isZh ? "团体运营情况" : "단체 운항 현황"}</div>
     <table class="a4-stats-table">
       <colgroup>
         <col style="width:10%"><col style="width:33%"><col style="width:7%">
         <col style="width:10%"><col style="width:33%"><col style="width:7%">
       </colgroup>
-      <thead><tr><th>날짜</th><th>OUT</th><th>총인원</th><th>날짜</th><th>IN</th><th>총인원</th></tr></thead>
+      <thead><tr>${isZh ? "<th>日期</th><th>出港 OUT</th><th>总人数</th><th>日期</th><th>入港 IN</th><th>总人数</th>" : "<th>날짜</th><th>OUT</th><th>총인원</th><th>날짜</th><th>IN</th><th>총인원</th>"}</tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <div class="a4-note">* 위 예약상황은 모객 중이므로 인원이 많이 변동될 수 있습니다.</div>
+    <div class="a4-note">${isZh ? "* 以上预订情况仍在招募中，人数可能会有较大变动。" : "* 위 예약상황은 모객 중이므로 인원이 많이 변동될 수 있습니다."}</div>
   `;
 }
 
@@ -3699,7 +3714,7 @@ function triggerStatsOrganizeExcelDownload(){
 }
 
 // "🖼️ 통계 이미지" 버튼 → 화면 밖에 A4 표를 잠시 그려서 캡처 후 바로 다운로드 (미리보기 없음)
-function downloadMonthlyStatsImageDirect(){
+function downloadMonthlyStatsImageDirect(lang){
   if(!db){ alert("데이터베이스 연결이 없습니다."); return; }
 
   const dropdown = document.getElementById("statsDropdown");
@@ -3710,20 +3725,21 @@ function downloadMonthlyStatsImageDirect(){
   const month = currentDate.getMonth() + 1;
 
   computeMonthlyGroupData(year, month).then(data => {
-    const tableHtml = buildStatsTableHtml(data);
+    const tableHtml = buildStatsTableHtml(data, lang);
 
     const captureEl = document.createElement("div");
     captureEl.className = "a4-portrait";
     captureEl.style.position = "fixed";
     captureEl.style.left = "-9999px";
     captureEl.style.top = "0";
+    if (lang === "zh") captureEl.style.fontFamily = '"Twemoji Country Flags", Arial, "Microsoft YaHei", "PingFang SC", "Noto Sans SC", "Malgun Gothic", sans-serif';
     captureEl.innerHTML = tableHtml;
     document.body.appendChild(captureEl);
 
     setTimeout(() => {
       html2canvas(captureEl, { scale: 2, backgroundColor: "#ffffff" }).then(canvas => {
         const link = document.createElement("a");
-        link.download = `단동훼리_${data.year}년${data.mm}월_단체운항현황.png`;
+        link.download = (lang === "zh") ? `丹东轮渡_${data.year}年${data.mm}月_团体运营情况.png` : `단동훼리_${data.year}년${data.mm}월_단체운항현황.png`;
         link.href = canvas.toDataURL("image/png");
         link.click();
         document.body.removeChild(captureEl);
