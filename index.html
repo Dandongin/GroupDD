@@ -3328,19 +3328,27 @@ function computeMonthlyGroupData(year, month){
             inP = (t.inAllocations || []).reduce((sum, a) => sum + (parseInt(a.people, 10) || 0), 0);
           }
 
+          // 출신 구분(중국어 통계 이미지용): 월·수·금 최초 출발=한국(K), 화·목·일 최초 출발=중국(C)
+          const _w = new Date(regDate + "T00:00:00Z").getUTCDay();
+          const origin = (_w === 1 || _w === 3 || _w === 5) ? "K" : ((_w === 2 || _w === 4 || _w === 0) ? "C" : "");
+          const addOrigin = (key, p) => { const g = outGroups[key]; (g.origins = g.origins || []).push(origin); (g.counts = g.counts || []).push(p); };
+
           if(pattern === 'ROUND'){
             if(!outGroups[regDate]) outGroups[regDate] = { names: [], total: 0 };
             outGroups[regDate].names.push(`${name} ${outP}명`);
             outGroups[regDate].total += outP;
+            addOrigin(regDate, outP);
 
             if(!outGroups[returnDate]) outGroups[returnDate] = { names: [], total: 0 };
             outGroups[returnDate].names.push(`${name} ${inP}명`);
             outGroups[returnDate].total += inP;
+            addOrigin(returnDate, inP);
 
           } else if(pattern === 'ONEWAY_OUT' || pattern === 'ONEWAY_IN'){
             if(!outGroups[regDate]) outGroups[regDate] = { names: [], total: 0 };
             outGroups[regDate].names.push(`${name} ${outP}명`);
             outGroups[regDate].total += outP;
+            addOrigin(regDate, outP);
           }
         });
       });
@@ -3538,22 +3546,120 @@ function downloadMonthlyExcel(year, month){
 }
 
 // computeMonthlyGroupData 결과로 A4 세로 1장용 미리보기 테이블 HTML 생성
+// ============================================================
+// [중국어 월 통계 이미지] 전용 표 생성 (한국어 buildStatsTableHtml 과는 별개)
+// - 월·수·금 최초 출발 = 한국 단체(파랑) / 화·목·일 최초 출발 = 중국 단체(빨강) 글자색 구분
+//   (왕복 단체의 리턴 구간도 출발한 단체의 색을 그대로 유지)
+// - 날짜 아래 줄에 요일 표시(가로 폭 절약), 총인원 오른쪽에 한국/중국 인원을 세로 두 줄로 표시
+// ============================================================
 const WEEKDAYS_ZH = ['周日','周一','周二','周三','周四','周五','周六'];
-function formatDateMDShortZh(dateStr){
-  if(!dateStr) return "";
-  const d = new Date(dateStr);
-  return `${d.getMonth() + 1}-${d.getDate()}(${WEEKDAYS_ZH[d.getDay()]})`;
+const STATS_ZH_KR_COLOR = "#1565c0";
+const STATS_ZH_CN_COLOR = "#d32f2f";
+
+function buildStatsTableHtmlZh(data){
+  const { leftDates, rightDates, outGroups, maxRows } = data;
+  const KR = STATS_ZH_KR_COLOR, CN = STATS_ZH_CN_COLOR;
+  const _t = new Date();
+  const titleText = `${data.year}年${data.month}月 (截至${_t.getMonth() + 1}/${_t.getDate()})`;
+
+  const colorOf = (o) => o === "K" ? KR : (o === "C" ? CN : "inherit");
+
+  const dateHtml = (dateStr) => {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    return `${d.getMonth() + 1}-${d.getDate()}<br>(${WEEKDAYS_ZH[d.getDay()]})`;
+  };
+
+  // formatGroupNames 와 같은 줄바꿈 규칙 + 단체마다 한국/중국 색상 span
+  const namesHtml = (g, maxChars = 31) => {
+    if (!g || !g.names || g.names.length === 0) return "";
+    const lines = [];
+    let cur = [];
+    let curText = "";
+    g.names.forEach((raw, i) => {
+      const nm = raw.replace(/(\d+)명$/, "$1人");
+      const cand = curText ? curText + ", " + nm : nm;
+      const item = { nm, o: (g.origins || [])[i] };
+      if (curText && getVisualWidth(cand) > maxChars) {
+        lines.push(cur);
+        cur = [item];
+        curText = nm;
+      } else {
+        cur.push(item);
+        curText = cand;
+      }
+    });
+    if (cur.length) lines.push(cur);
+    return lines.map(l => l.map(x => `<span style="color:${colorOf(x.o)};">${esc(x.nm)}</span>`).join(", ")).join("<br>");
+  };
+
+  const splitKC = (g) => {
+    let k = 0, c = 0;
+    if (g) (g.counts || []).forEach((p, i) => {
+      const o = (g.origins || [])[i];
+      if (o === "K") k += p; else if (o === "C") c += p;
+    });
+    return { k, c };
+  };
+  const kcHtml = (k, c) =>
+    `<span style="color:${KR};font-weight:bold;">${k || "-"}</span><br><span style="color:${CN};font-weight:bold;">${c || "-"}</span>`;
+
+  let rows = "";
+  let outSum = 0, inSum = 0, outK = 0, outC = 0, inK = 0, inC = 0;
+
+  for (let i = 0; i < maxRows; i++) {
+    const lDate = leftDates[i] || "";
+    const rDate = rightDates[i] || "";
+    const lg = lDate ? outGroups[lDate] : null;
+    const rg = rDate ? outGroups[rDate] : null;
+    const ls = splitKC(lg);
+    const rs = splitKC(rg);
+
+    if (lg) { outSum += lg.total; outK += ls.k; outC += ls.c; }
+    if (rg) { inSum += rg.total; inK += rs.k; inC += rs.c; }
+
+    rows += `<tr>
+      <td class="a4-col-date">${dateHtml(lDate)}</td>
+      <td class="a4-col-names">${namesHtml(lg)}</td>
+      <td class="a4-col-total">${lg ? lg.total : ""}</td>
+      <td class="a4-col-total">${lg ? kcHtml(ls.k, ls.c) : ""}</td>
+      <td class="a4-col-date">${dateHtml(rDate)}</td>
+      <td class="a4-col-names">${namesHtml(rg)}</td>
+      <td class="a4-col-total">${rg ? rg.total : ""}</td>
+      <td class="a4-col-total">${rg ? kcHtml(rs.k, rs.c) : ""}</td>
+    </tr>`;
+  }
+
+  rows += `<tr style="font-weight:bold; background:#fff2cc;">
+    <td class="a4-col-date"></td>
+    <td class="a4-col-names">总计</td>
+    <td class="a4-col-total">${outSum}</td>
+    <td class="a4-col-total">${kcHtml(outK, outC)}</td>
+    <td class="a4-col-date"></td>
+    <td class="a4-col-names">总计</td>
+    <td class="a4-col-total">${inSum}</td>
+    <td class="a4-col-total">${kcHtml(inK, inC)}</td>
+  </tr>`;
+
+  const kcTh = `<th><span style="color:${KR};">韩国</span><br><span style="color:${CN};">中国</span></th>`;
+
+  return `
+    <div class="a4-title">${esc(titleText)} 团体运营情况</div>
+    <table class="a4-stats-table">
+      <colgroup>
+        <col style="width:6.5%"><col style="width:29.5%"><col style="width:7.5%"><col style="width:6.5%">
+        <col style="width:6.5%"><col style="width:29.5%"><col style="width:7.5%"><col style="width:6.5%">
+      </colgroup>
+      <thead><tr><th>日期</th><th>出港 OUT</th><th>总人数</th>${kcTh}<th>日期</th><th>入港 IN</th><th>总人数</th>${kcTh}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="a4-note">* 以上预订情况仍在招募中，人数可能会有较大变动。</div>
+  `;
 }
 
 function buildStatsTableHtml(data, lang){
-  const isZh = (lang === "zh");
-  let { titleText, leftDates, rightDates, outGroups, maxRows } = data;
-  if (isZh) {
-    const _t = new Date();
-    titleText = `${data.year}年${data.month}月 (截至${_t.getMonth() + 1}/${_t.getDate()})`;
-  }
-  const fmtDate = isZh ? formatDateMDShortZh : formatDateMDShort;
-  const fmtNames = (names) => formatGroupNames(isZh ? names.map(n => n.replace(/(\d+)명$/, "$1人")) : names);
+  if (lang === "zh") return buildStatsTableHtmlZh(data);
+  const { titleText, leftDates, rightDates, outGroups, maxRows } = data;
 
   let rows = "";
   let outSum = 0;
@@ -3563,12 +3669,12 @@ function buildStatsTableHtml(data, lang){
     const lDate = leftDates[i] || "";
     const rDate = rightDates[i] || "";
 
-    const lDateDisp = lDate ? fmtDate(lDate) : "";
-    const lNamesDisp = (lDate && outGroups[lDate]) ? fmtNames(outGroups[lDate].names) : "";
+    const lDateDisp = lDate ? formatDateMDShort(lDate) : "";
+    const lNamesDisp = (lDate && outGroups[lDate]) ? formatGroupNames(outGroups[lDate].names) : "";
     const lTotalDisp = (lDate && outGroups[lDate]) ? outGroups[lDate].total : "";
 
-    const rDateDisp = rDate ? fmtDate(rDate) : "";
-    const rNamesDisp = (rDate && outGroups[rDate]) ? fmtNames(outGroups[rDate].names) : "";
+    const rDateDisp = rDate ? formatDateMDShort(rDate) : "";
+    const rNamesDisp = (rDate && outGroups[rDate]) ? formatGroupNames(outGroups[rDate].names) : "";
     const rTotalDisp = (rDate && outGroups[rDate]) ? outGroups[rDate].total : "";
 
     if (lTotalDisp !== "") outSum += lTotalDisp;
@@ -3586,24 +3692,24 @@ function buildStatsTableHtml(data, lang){
 
   rows += `<tr style="font-weight:bold; background:#fff2cc;">
     <td class="a4-col-date"></td>
-    <td class="a4-col-names">${isZh ? "总计" : "총 합계"}</td>
+    <td class="a4-col-names">총 합계</td>
     <td class="a4-col-total">${outSum}</td>
     <td class="a4-col-date"></td>
-    <td class="a4-col-names">${isZh ? "总计" : "총 합계"}</td>
+    <td class="a4-col-names">총 합계</td>
     <td class="a4-col-total">${inSum}</td>
   </tr>`;
 
   return `
-    <div class="a4-title">${esc(titleText)} ${isZh ? "团体运营情况" : "단체 운항 현황"}</div>
+    <div class="a4-title">${esc(titleText)} 단체 운항 현황</div>
     <table class="a4-stats-table">
       <colgroup>
         <col style="width:10%"><col style="width:33%"><col style="width:7%">
         <col style="width:10%"><col style="width:33%"><col style="width:7%">
       </colgroup>
-      <thead><tr>${isZh ? "<th>日期</th><th>出港 OUT</th><th>总人数</th><th>日期</th><th>入港 IN</th><th>总人数</th>" : "<th>날짜</th><th>OUT</th><th>총인원</th><th>날짜</th><th>IN</th><th>총인원</th>"}</tr></thead>
+      <thead><tr><th>날짜</th><th>OUT</th><th>총인원</th><th>날짜</th><th>IN</th><th>총인원</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <div class="a4-note">${isZh ? "* 以上预订情况仍在招募中，人数可能会有较大变动。" : "* 위 예약상황은 모객 중이므로 인원이 많이 변동될 수 있습니다."}</div>
+    <div class="a4-note">* 위 예약상황은 모객 중이므로 인원이 많이 변동될 수 있습니다.</div>
   `;
 }
 
