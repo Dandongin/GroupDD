@@ -537,9 +537,9 @@ button.tm-btn:hover{background:#fff6b8;}
         <button type="button" onclick="showRidingMonthlyStats()">🚴 라이딩 당월</button>
         <button type="button" onclick="showRidingStats()">🚴 라이딩 월별</button>
         <button type="button" onclick="downloadMonthlyStatsImageDirect()">🖼️ 월 통계 이미지</button>
-        <button type="button" onclick="downloadMonthlyStatsImageDirect('zh')">🖼️ 月 统计 中文</button>
         <button type="button" onclick="triggerMonthlyExcelDownload()">🟩 월 통계 엑셀</button>
-        <button type="button" onclick="triggerMonthlyExcelDownload('zh')">🟩 月 统计 Excel 中文</button>
+        <button type="button" onclick="downloadMonthlyStatsImageDirect('zh')">🖼️ 月 统计 中文</button>
+        <button type="button" onclick="triggerMonthlyExcelDownload('zh')">🟩 月 统计 Excel</button>
         <button type="button" onclick="showCostSumStats()">💰 Cost Sum</button>
         <button type="button" onclick="showNameVerifierModal()">🔍 명단 검증기</button>
         <button type="button" onclick="triggerStatsOrganizeExcelDownload()">📗 수대리 작업용</button>
@@ -3758,7 +3758,7 @@ function downloadMonthlyExcel(year, month, lang){
 
 // computeMonthlyGroupData 결과로 A4 세로 1장용 미리보기 테이블 HTML 생성
 // ============================================================
-// [중국어 월 통계 이미지] 전용 표 생성 (한국어 buildStatsTableHtml 과는 별개)
+// [월 통계 이미지] 한국어/중국어 공용 표 생성 (lang === "zh" 이면 중국어)
 // - 월·수·금 최초 출발 = 한국 단체(파랑) / 화·목·일 최초 출발 = 중국 단체(빨강) 글자색 구분
 //   (왕복 단체의 리턴 구간도 출발한 단체의 색을 그대로 유지)
 // - 날짜 아래 줄에 요일 표시(가로 폭 절약), 총인원 왼쪽에 한국/중국 인원을 세로 두 줄로 표시
@@ -3767,18 +3767,19 @@ const WEEKDAYS_ZH = ['周日','周一','周二','周三','周四','周五','周�
 const STATS_ZH_KR_COLOR = "#1565c0";
 const STATS_ZH_CN_COLOR = "#d32f2f";
 
-function buildStatsTableHtmlZh(data){
+function buildStatsTableHtmlKC(data, lang){
+  const isZh = (lang === "zh");
   const { leftDates, rightDates, outGroups, maxRows } = data;
   const KR = STATS_ZH_KR_COLOR, CN = STATS_ZH_CN_COLOR;
   const _t = new Date();
-  const titleText = `${data.year}年${data.month}月 (截至${_t.getMonth() + 1}/${_t.getDate()})`;
+  const titleText = isZh ? `${data.year}年${data.month}月 (截至${_t.getMonth() + 1}/${_t.getDate()})` : data.titleText;
 
   const colorOf = (o) => o === "K" ? KR : (o === "C" ? CN : "inherit");
 
   const dateHtml = (dateStr) => {
     if (!dateStr) return "";
     const d = new Date(dateStr);
-    return `${d.getMonth() + 1}-${d.getDate()}<br>(${WEEKDAYS_ZH[d.getDay()]})`;
+    return `${d.getMonth() + 1}-${d.getDate()}<br>(${(isZh ? WEEKDAYS_ZH : WEEKDAYS_KR)[d.getDay()]})`;
   };
 
   // formatGroupNames 와 같은 줄바꿈 규칙 + 단체마다 한국/중국 색상 span
@@ -3788,7 +3789,7 @@ function buildStatsTableHtmlZh(data){
     let cur = [];
     let curText = "";
     g.names.forEach((raw, i) => {
-      const nm = raw.replace(/(\d+)명$/, "$1人");
+      const nm = isZh ? raw.replace(/(\d+)명$/, "$1人") : raw;
       const cand = curText ? curText + ", " + nm : nm;
       const item = { nm, o: (g.origins || [])[i] };
       if (curText && getVisualWidth(cand) > maxChars) {
@@ -3843,85 +3844,35 @@ function buildStatsTableHtmlZh(data){
 
   rows += `<tr style="font-weight:bold; background:#fff2cc;">
     <td class="a4-col-date"></td>
-    <td class="a4-col-names">总计</td>
+    <td class="a4-col-names">${isZh ? "总计" : "총 합계"}</td>
     <td class="a4-col-total">${kcHtml(outK, outC)}</td>
     <td class="a4-col-total">${outSum}</td>
     <td class="a4-col-date"></td>
-    <td class="a4-col-names">总计</td>
+    <td class="a4-col-names">${isZh ? "总计" : "총 합계"}</td>
     <td class="a4-col-total">${kcHtml(inK, inC)}</td>
     <td class="a4-col-total">${inSum}</td>
   </tr>`;
 
-  const kcTh = `<th><span style="color:${KR};">韩国</span><br><span style="color:${CN};">中国</span></th>`;
+  const kcTh = `<th><span style="color:${KR};">${isZh ? "韩国" : "한국"}</span><br><span style="color:${CN};">${isZh ? "中国" : "중국"}</span></th>`;
 
   return `
-    <div class="a4-title">${esc(titleText)} 团体运营情况</div>
+    <div class="a4-title">${esc(titleText)} ${isZh ? "团体运营情况" : "단체 운항 현황"}</div>
     <table class="a4-stats-table">
       <colgroup>
         <col style="width:6.5%"><col style="width:29.5%"><col style="width:6.5%"><col style="width:7.5%">
         <col style="width:6.5%"><col style="width:29.5%"><col style="width:6.5%"><col style="width:7.5%">
       </colgroup>
-      <thead><tr><th>日期</th><th>出港 OUT</th>${kcTh}<th>总人数</th><th>日期</th><th>入港 IN</th>${kcTh}<th>总人数</th></tr></thead>
+      <thead><tr>${isZh
+        ? `<th>日期</th><th>出港 OUT</th>${kcTh}<th>总人数</th><th>日期</th><th>入港 IN</th>${kcTh}<th>总人数</th>`
+        : `<th>날짜</th><th>OUT</th>${kcTh}<th>총인원</th><th>날짜</th><th>IN</th>${kcTh}<th>총인원</th>`}</tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <div class="a4-note">* 以上预订情况仍在招募中，人数可能会有较大变动。</div>
+    <div class="a4-note">${isZh ? "* 以上预订情况仍在招募中，人数可能会有较大变动。" : "* 위 예약상황은 모객 중이므로 인원이 많이 변동될 수 있습니다."}</div>
   `;
 }
 
 function buildStatsTableHtml(data, lang){
-  if (lang === "zh") return buildStatsTableHtmlZh(data);
-  const { titleText, leftDates, rightDates, outGroups, maxRows } = data;
-
-  let rows = "";
-  let outSum = 0;
-  let inSum = 0;
-
-  for (let i = 0; i < maxRows; i++) {
-    const lDate = leftDates[i] || "";
-    const rDate = rightDates[i] || "";
-
-    const lDateDisp = lDate ? formatDateMDShort(lDate) : "";
-    const lNamesDisp = (lDate && outGroups[lDate]) ? formatGroupNames(outGroups[lDate].names) : "";
-    const lTotalDisp = (lDate && outGroups[lDate]) ? outGroups[lDate].total : "";
-
-    const rDateDisp = rDate ? formatDateMDShort(rDate) : "";
-    const rNamesDisp = (rDate && outGroups[rDate]) ? formatGroupNames(outGroups[rDate].names) : "";
-    const rTotalDisp = (rDate && outGroups[rDate]) ? outGroups[rDate].total : "";
-
-    if (lTotalDisp !== "") outSum += lTotalDisp;
-    if (rTotalDisp !== "") inSum += rTotalDisp;
-
-    rows += `<tr>
-      <td class="a4-col-date">${esc(lDateDisp)}</td>
-      <td class="a4-col-names">${esc(lNamesDisp).replace(/\n/g,"<br>")}</td>
-      <td class="a4-col-total">${esc(lTotalDisp === "" ? "" : String(lTotalDisp))}</td>
-      <td class="a4-col-date">${esc(rDateDisp)}</td>
-      <td class="a4-col-names">${esc(rNamesDisp).replace(/\n/g,"<br>")}</td>
-      <td class="a4-col-total">${esc(rTotalDisp === "" ? "" : String(rTotalDisp))}</td>
-    </tr>`;
-  }
-
-  rows += `<tr style="font-weight:bold; background:#fff2cc;">
-    <td class="a4-col-date"></td>
-    <td class="a4-col-names">총 합계</td>
-    <td class="a4-col-total">${outSum}</td>
-    <td class="a4-col-date"></td>
-    <td class="a4-col-names">총 합계</td>
-    <td class="a4-col-total">${inSum}</td>
-  </tr>`;
-
-  return `
-    <div class="a4-title">${esc(titleText)} 단체 운항 현황</div>
-    <table class="a4-stats-table">
-      <colgroup>
-        <col style="width:10%"><col style="width:33%"><col style="width:7%">
-        <col style="width:10%"><col style="width:33%"><col style="width:7%">
-      </colgroup>
-      <thead><tr><th>날짜</th><th>OUT</th><th>총인원</th><th>날짜</th><th>IN</th><th>총인원</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    <div class="a4-note">* 위 예약상황은 모객 중이므로 인원이 많이 변동될 수 있습니다.</div>
-  `;
+  return buildStatsTableHtmlKC(data, lang);
 }
 
 // "📗 통계 정리용" 버튼용 엑셀 생성
