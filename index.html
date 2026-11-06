@@ -1906,9 +1906,13 @@ document.addEventListener('DOMContentLoaded', function() {
       {
         events: async function(fetchInfo, successCallback) {
           try {
-            const year = fetchInfo.start.getFullYear();
-            const res = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/KR`);
-            const holidays = await res.json();
+            // 달력 화면이 연도를 걸칠 때(예: 1월 화면 = 전년 12월 말~) 해당 연도를 모두 조회
+            const years = [];
+            for (let y = fetchInfo.start.getFullYear(); y <= fetchInfo.end.getFullYear(); y++) years.push(y);
+            const results = await Promise.all(years.map(y =>
+              fetch(`https://date.nager.at/api/v3/PublicHolidays/${y}/KR`).then(r => r.json()).catch(() => [])
+            ));
+            const holidays = results.flat();
             holidays.forEach(h => krHolidaySet.add(h.date));
             document.querySelectorAll('.fc-daygrid-day').forEach(c => { if (krHolidaySet.has(c.getAttribute('data-date'))) c.classList.add('kr-holiday'); });
             successCallback(holidays.map(h => ({
@@ -1956,7 +1960,11 @@ document.addEventListener('DOMContentLoaded', function() {
           };
 
           let events = [];
-          const list = cnHolidays[year] || [];
+          // 달력 화면이 연도를 걸칠 때(예: 1월 화면 = 전년 12월 말~) 해당 연도 목록을 모두 합침
+          let list = [];
+          for (let y = fetchInfo.start.getFullYear(); y <= fetchInfo.end.getFullYear(); y++) {
+            list = list.concat(cnHolidays[y] || []);
+          }
 
           list.forEach(h => {
             let cur = new Date(h.start);
