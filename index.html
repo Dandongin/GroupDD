@@ -8,6 +8,24 @@
 <!-- FullCalendar CDN -->
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
 
+<!-- 접속 지역 판별: 중국이면 Firebase 대신 JSON 읽기 전용 모드 사용 (한국 동작은 변경 없음) -->
+<script>
+(function(){
+  var cn = false;
+  try {
+    // 주소 뒤에 ?mode=cn 또는 ?mode=kr 을 붙이면 자동 판별 대신 강제 지정
+    var m = (new URLSearchParams(location.search).get('mode') || '').toLowerCase();
+    if (m === 'cn') cn = true;
+    else if (m === 'kr') cn = false;
+    else {
+      var tz = (Intl.DateTimeFormat().resolvedOptions().timeZone || '');
+      cn = /^(Asia\/(Shanghai|Chongqing|Harbin|Urumqi|Kashgar)|PRC)$/.test(tz);
+    }
+  } catch(e) {}
+  window.DANDONG_CN_MODE = cn;
+})();
+</script>
+
 <!-- Firebase CDN -->
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
@@ -727,6 +745,125 @@ try {
   }
 } catch(e) { console.log("Firebase Init Error:", e); }
 
+/* ===== 중국 접속 모드 (조회·다운로드 전용) =====
+   Firebase 가 막힌 환경에서는 GitHub Pages 의 ./data/*.json (GitHub Actions 가 약 10분마다 갱신)을 읽어
+   Firestore 와 같은 형태(db.collection().get() 등)로 돌려준다. 쓰기(등록/수정/삭제)는 전부 차단한다. */
+let CN_READONLY = false;
+const CN_DATA_BASE = "./data/";
+
+function cnBlock(){
+  if (!CN_READONLY) return false;
+  alert("중국 접속 모드에서는 조회·다운로드만 가능합니다.\n등록·수정·삭제는 한국에서 해 주세요.\n(中国访问模式仅可查看和下载，不能新增/修改/删除)");
+  return true;
+}
+
+function createJsonReadOnlyDb(){
+  const TTL = 5 * 60 * 1000;
+  // transferMemos: 비밀번호가 들어 있고 '본인 확인'(쓰기)이 필요한 기능이라 중국 모드에서는 불러오지 않음
+  const SKIP = { transferMemos: true };
+  const cache = {};
+  const denied = function(){ return Promise.reject(new Error("중국 접속 모드는 읽기 전용입니다.")); };
+  const has = function(o, k){ return Object.prototype.hasOwnProperty.call(o, k); };
+
+  // JSON 에서 {"__ts": 밀리초} 로 저장된 Firestore Timestamp 를 복원
+  function revive(v){
+    if (v && typeof v === "object") {
+      if (Array.isArray(v)) return v.map(revive);
+      if (has(v, "__ts") && Object.keys(v).length === 1) {
+        const ms = v.__ts;
+        return { seconds: Math.floor(ms / 1000), nanoseconds: (ms % 1000) * 1e6, toMillis: function(){ return ms; }, toDate: function(){ return new Date(ms); } };
+      }
+      const o = {};
+      Object.keys(v).forEach(function(k){ o[k] = revive(v[k]); });
+      return o;
+    }
+    return v;
+  }
+
+  function load(col){
+    if (SKIP[col]) return Promise.resolve({});
+    const c = cache[col];
+    if (c && Date.now() - c.t < TTL) return c.p;
+    const p = fetch(CN_DATA_BASE + col + ".json?v=" + Math.floor(Date.now() / TTL), { cache: "no-cache" })
+      .then(function(r){ if (!r.ok) throw new Error(col + ".json 불러오기 실패 (" + r.status + ")"); return r.json(); })
+      .then(function(j){ return (j && j.docs) || {}; });
+    cache[col] = { t: Date.now(), p: p };
+    p.catch(function(){ if (cache[col] && cache[col].p === p) delete cache[col]; });
+    return p;
+  }
+
+  function docSnap(id, map){
+    const ok = has(map, id);
+    return { id: id, exists: ok, data: function(){ return ok ? revive(map[id]) : undefined; } };
+  }
+  function querySnap(map){
+    const docs = Object.keys(map).sort().map(function(id){ return docSnap(id, map); });
+    return { docs: docs, size: docs.length, empty: docs.length === 0, forEach: function(fn){ docs.forEach(fn); } };
+  }
+
+  return {
+    collection: function(col){
+      return {
+        get: function(){ return load(col).then(querySnap); },
+        doc: function(id){
+          return {
+            id: id,
+            get: function(){ return load(col).then(function(m){ return docSnap(id, m); }); },
+            set: denied, update: denied, delete: denied
+          };
+        },
+        add: denied,
+        onSnapshot: function(ok, err){
+          let on = true;
+          load(col).then(function(m){ if (on && ok) ok(querySnap(m)); })
+                   .catch(function(e){ if (on && err) err(e); });
+          return function(){ on = false; };
+        }
+      };
+    },
+    batch: function(){
+      const b = { set: function(){ return b; }, update: function(){ return b; }, delete: function(){ return b; }, commit: denied };
+      return b;
+    }
+  };
+}
+
+if (window.DANDONG_CN_MODE || (!db && typeof firebase === 'undefined')) {
+  CN_READONLY = true;
+  db = createJsonReadOnlyDb();
+  document.body.classList.add("cn-readonly");
+  // 데이터 변경 버튼은 비활성화 (레이아웃은 그대로, 흐리게 + 클릭 불가)
+  const cnStyle = document.createElement("style");
+  cnStyle.textContent =
+    'body.cn-readonly #memoSubmitBtn,' +
+    'body.cn-readonly [onclick*="saveMonthlyDefaults"],' +
+    'body.cn-readonly [onclick*="runSimulation(true)"],' +
+    'body.cn-readonly [onclick*="deleteDateData"],' +
+    'body.cn-readonly [onclick*="startEditMemo"],' +
+    'body.cn-readonly [onclick*="deleteMemoItem"],' +
+    'body.cn-readonly [onclick*="noticeFileInput"],' +
+    'body.cn-readonly [onclick*="deleteNoticeImage"],' +
+    'body.cn-readonly [onclick*="showTransferMemoAdmin"],' +
+    'body.cn-readonly [onclick*="tmSaveMemo"],' +
+    'body.cn-readonly [onclick*="tmDeleteMemo"]' +
+    '{opacity:.35 !important;pointer-events:none !important;filter:grayscale(1);cursor:not-allowed;}' +
+    '#cnReadonlyBadge{position:fixed;left:10px;bottom:10px;z-index:50;font-size:11px;line-height:1.4;' +
+    'background:rgba(23,50,77,.88);color:#fff;padding:5px 10px;border-radius:12px;pointer-events:none;}';
+  document.head.appendChild(cnStyle);
+  const cnBadge = document.createElement("div");
+  cnBadge.id = "cnReadonlyBadge";
+  cnBadge.textContent = "읽기 전용(只读) · 데이터 확인 중...";
+  document.body.appendChild(cnBadge);
+  fetch(CN_DATA_BASE + "meta.json?v=" + Date.now(), { cache: "no-cache" })
+    .then(function(r){ return r.json(); })
+    .then(function(m){
+      const d = new Date(m.syncedAt);
+      const pad = function(n){ return String(n).padStart(2, "0"); };
+      cnBadge.textContent = "읽기 전용(只读) · 데이터 기준 " + (d.getMonth() + 1) + "/" + d.getDate() + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+    })
+    .catch(function(){ cnBadge.textContent = "읽기 전용(只读) · 데이터 기준 시각 확인 불가"; });
+}
+
 let selectedDate = "";
 let calendar = null;
 let teamSeq = 0;
@@ -1138,6 +1275,7 @@ function closeNoticeFullScreen() {
 }
 
 function handleNoticeImageUpload(event) {
+  if (cnBlock()) return;
   const file = event.target.files[0];
   if (!file) return;
 
@@ -1165,6 +1303,7 @@ function handleNoticeImageUpload(event) {
 }
 
 function deleteNoticeImage() {
+  if (cnBlock()) return;
   if (confirm("등록된 공지문 이미지를 삭제하시겠습니까?")) {
     if (db) {
       db.collection("notice").doc("current").delete().then(() => {
@@ -2316,6 +2455,7 @@ function loadEventDataForDate(dateStr){
 function closeEventSection(){ document.getElementById("eventSection").classList.add("hidden"); }
 
 function addMemoItem(){
+  if(cnBlock()) return;
   const dateStr = document.getElementById("eventDate").value;
   if(!dateStr){ alert("날짜를 선택해주세요."); return; }
   const title = document.getElementById("eventTitle").value.trim();
@@ -2454,6 +2594,7 @@ function updateMemoItem(dateStr, title, color, flag){
 }
 
 function deleteMemoItem(dateStr, itemId){
+  if(cnBlock()) return;
   if(!dateStr || !db) return;
   if(!confirm("이 메모를 삭제하시겠습니까?")) return;
   if(editingMemoId === itemId) cancelEditMemo();
@@ -2603,6 +2744,7 @@ function updateMonthlyTotal(m){
 }
 
 function saveMonthlyDefaults(){
+  if(cnBlock()) return;
   const raw = {};
   for(let m = 1; m <= 12; m++){
     raw[m] = {
@@ -3238,6 +3380,7 @@ function runSimulation(shouldSave = true){
   document.getElementById("teamResultsContainer").innerHTML = teamResultsHtml;
   document.getElementById("simResult").classList.remove("hidden");
 
+  if(shouldSave && cnBlock()) return;
   if(shouldSave && db && selectedDate){
     db.collection("schedules").doc(selectedDate).set({
       totalPeople: grandTotalPeople,
@@ -3254,6 +3397,7 @@ function runSimulation(shouldSave = true){
 }
 
 function deleteDateData(){
+  if(cnBlock()) return;
   if(!selectedDate) return;
   if(confirm(`정말로 ${selectedDate} 날짜의 데이터를 삭제하시겠습니까?`)){
     if(db){
@@ -4493,6 +4637,7 @@ function tmSubmitPw() {
   tmDoConfirm(document.getElementById("tmPwInput").value);
 }
 function tmDoConfirm(pw) {
+  if (cnBlock()) return;
   if (!db) { alert("서버 연결이 되어 있지 않습니다."); return; }
   const id = tmViewId;
   if (!id) return;
@@ -4567,6 +4712,7 @@ function tmTogglePw() {
   if (wrap) wrap.classList.toggle("hidden", !(r && r.value === "1"));
 }
 function tmSaveMemo() {
+  if (cnBlock()) return;
   if (!db) { alert("서버 연결이 되어 있지 않습니다."); return; }
   const title = document.getElementById("tmInTitle").value.trim();
   const content = document.getElementById("tmInContent").value.trim();
@@ -4627,6 +4773,7 @@ function tmRefreshAdminList() {
   }).join("");
 }
 function tmDeleteMemo(id) {
+  if (cnBlock()) return;
   if (!db) return;
   if (!confirm("이 메모 전달를 삭제하시겠습니까?")) return;
   db.collection(TM_COL).doc(id).delete().catch(function(err) {
