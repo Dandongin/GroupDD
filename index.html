@@ -3825,7 +3825,7 @@ function buildMonthlyRichWorkbook(data, lang){
   // 2행: 머리글
   styleRow(2, { font: { bold: true }, fill: "FFF2F2F2" });
   const headers = isZh
-    ? ["日期", "出港 OUT", "总人数", "日期", "入港 IN", "总人数"]
+    ? /* 중국 기준: 월·수·금(한국 출항)=중국 입항, 화·목·일(한국 입항)=중국 출항 → 라벨만 반대로 */ ["日期", "入港 IN", "总人数", "日期", "出港 OUT", "总人数"]
     : ["날짜", "OUT", "총인원", "날짜", "IN", "총인원"];
   headers.forEach((v, i) => { ws.getCell(2, i + 1).value = v; });
   setHeight(2, 1);
@@ -4035,7 +4035,7 @@ function buildStatsTableHtmlKC(data, lang){
         <col style="width:9%"><col style="width:34%"><col style="width:7%">`}
       </colgroup>
       <thead><tr>${isZh
-        ? `<th>日期</th><th>出港 OUT</th><th>总人数</th><th>日期</th><th>入港 IN</th><th>总人数</th>`
+        ? `<th>日期</th><th>入港 IN</th><th>总人数</th><th>日期</th><th>出港 OUT</th><th>总人数</th>`
         : `<th>날짜</th><th>OUT</th><th>총인원</th><th>날짜</th><th>IN</th><th>총인원</th>`}</tr></thead>
       <tbody>${rows}</tbody>
     </table>
