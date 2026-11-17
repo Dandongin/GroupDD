@@ -18,7 +18,7 @@
 "2026-10-25":{"items":[{"id":"m_1789343507774_ny8yx","title":"박채연","color":"#cfd8dc"}],"updatedAt":{"__ts":1789343507774}},
 "2026-11-01":{"items":[{"color":"#cfd8dc","flag":"","title":"정재전","id":"m_1791270736278_sd9gs"}],"updatedAt":{"__ts":1793319401453}},
 "2026-11-08":{"items":[{"flag":"","title":"김용하","id":"m_1791270755357_97v38","color":"#cfd8dc"}],"updatedAt":{"__ts":1793861780085}},
-"2026-11-15":{"updatedAt":{"__ts":1794881295045},"items":[{"id":"m_1791270776898_jpyh5","flag":"","color":"#cfd8dc","title":"수상지"}]},
+"2026-11-15":{"items":[{"id":"m_1791270776898_jpyh5","flag":"","color":"#cfd8dc","title":"수상지"}],"updatedAt":{"__ts":1794881295045}},
 "2026-11-22":{"updatedAt":{"__ts":1793319447894},"items":[{"title":"공선희","id":"m_1791270793746_mhmch","flag":"","color":"#cfd8dc"}]},
 "2026-11-29":{"updatedAt":{"__ts":1791270805227},"items":[{"id":"m_1791270805227_vsw7j","title":"김용하","color":"#cfd8dc","flag":""}]},
 "2026-12-06":{"updatedAt":{"__ts":1791270824499},"items":[{"id":"m_1791270824499_ll2u0","title":"박재홍","color":"#cfd8dc","flag":""}]},
