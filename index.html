@@ -55,7 +55,7 @@ header h1{margin:0;font-size:20px}
 }
 
 .date-title{font-size:20px;font-weight:bold;color:#17324d;margin-bottom:15px;display:flex;align-items:center;gap:10px;}
-.team-card{border:1px solid #c3d1e0;background:#f8fafc;border-radius:10px;padding:16px;margin-bottom:16px}
+.team-card{border:1px solid #c3d1e0;background:#f8fafc;border-radius:10px;padding:16px;margin-bottom:16px;position:relative}
 .team-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:2px solid #e1e7ef;padding-bottom:10px;gap:8px;flex-wrap:wrap;}
 h2{font-size:16px;margin:0 0 12px}
 label{font-size:12px;color:#5c6673;display:block;margin-bottom:4px}
@@ -2935,7 +2935,6 @@ function addTeam(name="", pattern="ROUND", nights="", price="", memo="", isSplit
 
       <button class="danger" type="button" onclick="document.getElementById('${teamId}').remove()" style="margin-left:auto;">삭제</button>
     </div>
-    <div class="teamCreatedInfo" style="font-size:12px; color:#5c6673; margin-bottom:6px;"></div>
     <div style="margin-bottom:10px;">
       <textarea class="teamMemo" placeholder="단체 메모 " rows="1">${esc(memo)}</textarea>
     </div>
@@ -2954,6 +2953,7 @@ function addTeam(name="", pattern="ROUND", nights="", price="", memo="", isSplit
       <div class="inRoomTypesContainer"></div>
       <button class="secondary" type="button" style="font-size:12px; padding:4px 8px; margin-top:4px;" onclick="addRoomTypeToTeam('${teamId}', 'inRoomTypesContainer')">+ 입국 객실 추가</button>
     </div>
+    <div class="teamCreatedInfo" style="position:absolute; right:16px; bottom:16px; font-size:12px; color:#5c6673; white-space:nowrap;"></div>
   `;
   document.getElementById("teamsContainer").appendChild(teamDiv);
   refreshTeamCreatedLabel(teamDiv);
@@ -3064,7 +3064,6 @@ function restoreTeamUI(teamData){
 
       <button class="danger" type="button" onclick="document.getElementById('${teamId}').remove()" style="margin-left:auto;">삭제</button>
     </div>
-    <div class="teamCreatedInfo" style="font-size:12px; color:#5c6673; margin-bottom:6px;"></div>
     <div style="margin-bottom:10px;">
       <textarea class="teamMemo" placeholder="단체 메모" rows="1">${esc(teamData.memo||'')}</textarea>
     </div>
@@ -3083,6 +3082,7 @@ function restoreTeamUI(teamData){
       <div class="inRoomTypesContainer"></div>
       <button class="secondary" type="button" style="font-size:12px; padding:4px 8px; margin-top:4px;" onclick="addRoomTypeToTeam('${teamId}', 'inRoomTypesContainer')">+ 입국 객실 추가</button>
     </div>
+    <div class="teamCreatedInfo" style="position:absolute; right:16px; bottom:16px; font-size:12px; color:#5c6673; white-space:nowrap;"></div>
   `;
   document.getElementById("teamsContainer").appendChild(teamDiv);
   refreshTeamCreatedLabel(teamDiv);
