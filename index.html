@@ -929,6 +929,15 @@ function markRestaurantDates(restaurantDates) {
   });
 }
 
+// 단체 구분(한국/중국): 단체에 직접 지정한 값(origin)이 있으면 그 값, 없으면 첫 출발 요일 기준(월·수·금=한국, 화·목·일=중국)
+function getTeamOrigin(t, dateStr){
+  if (t && (t.origin === "K" || t.origin === "C")) return t.origin;
+  const w = new Date(dateStr + "T00:00:00Z").getUTCDay();
+  if (w === 1 || w === 3 || w === 5) return "K";
+  if (w === 2 || w === 4 || w === 0) return "C";
+  return "";
+}
+
 function getDefaultNightsByDate(dateStr) {
   if (!dateStr) return "4";
   const dow = new Date(dateStr).getDay(); 
@@ -1480,8 +1489,10 @@ function showCostSumStats() {
         const price = parseFloat(m[0]);
         if (!(price > 0)) return;
 
+        const _o = getTeamOrigin(t, regDate);
+        const teamBucket = _o === "K" ? "kr" : (_o === "C" ? "cn" : bucket);
         if (!rows[monthKey]) rows[monthKey] = { kr: {}, cn: {} };
-        rows[monthKey][bucket][price] = (rows[monthKey][bucket][price] || 0) + people;
+        rows[monthKey][teamBucket][price] = (rows[monthKey][teamBucket][price] || 0) + people;
       });
     });
     costSumRows = rows;
@@ -1652,10 +1663,11 @@ function showMonthlyStats() {
 
           data.teams.forEach(t => {
             const people = parseInt(t.totalPeople || 0, 10);
-            if (dow === 1 || dow === 3 || dow === 5) {
+            const _o = getTeamOrigin(t, regDate);
+            if (_o === "K") {
               krPeople += people;
               krGroupCount++;
-            } else if (dow === 2 || dow === 4 || dow === 0) {
+            } else if (_o === "C") {
               cnPeople += people;
               cnGroupCount++;
             }
@@ -2898,6 +2910,11 @@ function addTeam(name="", pattern="ROUND", nights="", price="", memo="", isSplit
     <div class="team-head">
       <input type="text" class="teamName" placeholder="단체명" value="${esc(name)}" style="max-width:160px; font-weight:bold;">
       <label style="display:inline-flex; align-items:center; gap:4px; margin:0; font-weight:bold; white-space:nowrap;" title="출발일을 바꾸고 저장하면 해당 날짜로 내용이 그대로 이동됩니다">출발일 <input type="date" class="teamDate" value="${esc(selectedDate)}" style="width:140px;"></label>
+      <select class="teamOrigin" style="width:auto; max-width:130px;" title="한국 출발 편도 중국 단체처럼 요일과 다른 경우 직접 지정">
+        <option value="" ${!("")?'selected':''}>구분 자동(요일)</option>
+        <option value="K" ${("")==='K'?'selected':''}>🇰🇷 한국 단체</option>
+        <option value="C" ${("")==='C'?'selected':''}>🇨🇳 중국 단체</option>
+      </select>
       <select class="teamPattern" style="max-width:180px;" onchange="togglePatternUI('${teamId}')">
         <option value="ROUND" ${_p==='ROUND'?'selected':''}>🔄 왕복 </option>
         <option value="ONEWAY_OUT" ${_p==='ONEWAY_OUT'?'selected':''}>➡️ 편도 </option>
@@ -3022,6 +3039,11 @@ function restoreTeamUI(teamData){
     <div class="team-head">
       <input type="text" class="teamName" placeholder="단체명" value="${esc(teamData.name)}" style="max-width:160px; font-weight:bold;">
       <label style="display:inline-flex; align-items:center; gap:4px; margin:0; font-weight:bold; white-space:nowrap;" title="출발일을 바꾸고 저장하면 해당 날짜로 내용이 그대로 이동됩니다">출발일 <input type="date" class="teamDate" value="${esc(selectedDate)}" style="width:140px;"></label>
+      <select class="teamOrigin" style="width:auto; max-width:130px;" title="한국 출발 편도 중국 단체처럼 요일과 다른 경우 직접 지정">
+        <option value="" ${!(teamData.origin)?'selected':''}>구분 자동(요일)</option>
+        <option value="K" ${(teamData.origin)==='K'?'selected':''}>🇰🇷 한국 단체</option>
+        <option value="C" ${(teamData.origin)==='C'?'selected':''}>🇨🇳 중국 단체</option>
+      </select>
       <select class="teamPattern" style="max-width:180px;" onchange="togglePatternUI('${teamId}')">
         <option value="ROUND" ${_p==='ROUND'?'selected':''}>🔄 왕복 </option>
         <option value="ONEWAY_OUT" ${_p==='ONEWAY_OUT'?'selected':''}>➡️ 편도 </option>
@@ -3237,6 +3259,7 @@ function runSimulation(shouldSave = true){
       totalPeople: teamTotalPeople,
       allocations, outAllocations, inAllocations,
       itineraryStr, returnDate,
+      origin: card.querySelector(".teamOrigin")?.value || "",
       createdAt: parseInt(card.dataset.createdAt, 10) || (shouldSave ? Date.now() : 0),
       isReturnOnTarget: false
     };
@@ -3355,9 +3378,10 @@ function runSimulation(shouldSave = true){
       const isReturn = team.isReturnOnTarget;
       const firstDepartDate = isReturn ? team.regDate : selectedDate;
       const firstDepartDow = firstDepartDate ? new Date(firstDepartDate).getDay() : null;
-      const isTueThuSunDeparture = (firstDepartDow === 2 || firstDepartDow === 4 || firstDepartDow === 0);
+      const _teamOrigin = firstDepartDate ? getTeamOrigin(team, firstDepartDate) : "";
+      const isTueThuSunDeparture = (_teamOrigin === "C");
       const teamNameColor = isTueThuSunDeparture ? '#8b0000' : '#1769aa';
-      const dowFlag = isTueThuSunDeparture ? '🇨🇳' : (firstDepartDow === 1 || firstDepartDow === 3 || firstDepartDow === 5) ? '🇰🇷' : '';
+      const dowFlag = isTueThuSunDeparture ? '🇨🇳' : (_teamOrigin === "K") ? '🇰🇷' : '';
       let targetAllocations = [];
 
       if (isReturn) {
@@ -3565,8 +3589,7 @@ function computeMonthlyGroupData(year, month){
           }
 
           // 출신 구분(중국어 통계 이미지용): 월·수·금 최초 출발=한국(K), 화·목·일 최초 출발=중국(C)
-          const _w = new Date(regDate + "T00:00:00Z").getUTCDay();
-          const origin = (_w === 1 || _w === 3 || _w === 5) ? "K" : ((_w === 2 || _w === 4 || _w === 0) ? "C" : "");
+          const origin = getTeamOrigin(t, regDate);
           const addOrigin = (key, p) => { const g = outGroups[key]; (g.origins = g.origins || []).push(origin); (g.counts = g.counts || []).push(p); };
 
           if(pattern === 'ROUND'){
@@ -3644,7 +3667,7 @@ function computeDepartureOnlyData(year, month){
           // ROUND든 ONEWAY든, 그 팀이 실제로 "출발"하는 날은 regDate 뿐 (복귀 구간은 제외)
           if (pattern === 'ROUND' || pattern === 'ONEWAY_OUT' || pattern === 'ONEWAY_IN') {
             if (!departureGroups[regDate]) departureGroups[regDate] = [];
-            departureGroups[regDate].push({ name, count: outP });
+            departureGroups[regDate].push({ name, count: outP, origin: getTeamOrigin(t, regDate) });
           }
         });
       });
@@ -4129,12 +4152,14 @@ function buildStatsOrganizeExcel(data){
   const { year, mm, titleText, leftDates, rightDates, departureGroups } = data;
 
   // 날짜 순서대로, 그 날짜에 출발하는 모든 단체를 [날짜, 여행사명, 인원] 한 행씩 나열
-  const flattenDepartures = (dates) => {
+  // 단체 구분(한국/중국)에 따라 왼쪽(한국)/오른쪽(중국) 열에 배치 (요일과 다르게 지정된 단체도 반영)
+  const flattenDepartures = (wantOrigin) => {
     const rows = [];
-    dates.forEach(d => {
+    leftDates.concat(rightDates).sort().forEach(d => {
       const teams = departureGroups[d];
       if (teams && teams.length) {
         teams.forEach(team => {
+          if (team.origin !== wantOrigin) return;
           rows.push([formatDateMDShort(d), team.name, team.count]);
         });
       }
@@ -4142,8 +4167,8 @@ function buildStatsOrganizeExcel(data){
     return rows;
   };
 
-  const leftRows = flattenDepartures(leftDates);
-  const rightRows = flattenDepartures(rightDates);
+  const leftRows = flattenDepartures("K");
+  const rightRows = flattenDepartures("C");
   const maxLen = Math.max(leftRows.length, rightRows.length);
 
   const aoa = [];
@@ -4310,6 +4335,7 @@ function computeCiqData(year, month){
 
     db.collection("schedules").get().then(querySnapshot => {
       const firstOut = {};  // 날짜 -> 그날 최초 출국(출발) 단체 인원 합
+      const outSwap = {};   // 날짜 -> 그 중 요일 기준과 다르게 구분 지정된 단체 인원 합 (예: 한국 출발 편도 중국 단체)
       const retIn = {};     // 날짜 -> 그날 리턴 단체 인원 합 (왕복 단체만)
 
       querySnapshot.forEach(doc => {
@@ -4332,6 +4358,9 @@ function computeCiqData(year, month){
 
           if (pattern === 'ROUND' || pattern === 'ONEWAY_OUT' || pattern === 'ONEWAY_IN') {
             firstOut[regDate] = (firstOut[regDate] || 0) + outP;
+            const _w = new Date(regDate + "T00:00:00Z").getUTCDay();
+            const _dayOrigin = (_w === 1 || _w === 3 || _w === 5) ? "K" : "C";
+            if (getTeamOrigin(t, regDate) !== _dayOrigin) outSwap[regDate] = (outSwap[regDate] || 0) + outP;
           }
           if (pattern === 'ROUND') {
             retIn[returnDate] = (retIn[returnDate] || 0) + inP;
@@ -4348,10 +4377,10 @@ function computeCiqData(year, month){
         if (dow !== 1 && dow !== 3 && dow !== 5) continue;
         const prev = ciqAddDays(d, -1);   // 전날(일,화,목) 출발 → 오늘 입항
         days[d] = {
-          inK: retIn[prev] || 0,
-          inC: firstOut[prev] || 0,
-          outK: firstOut[d] || 0,
-          outC: retIn[d] || 0
+          inK: (retIn[prev] || 0) + (outSwap[prev] || 0),
+          inC: (firstOut[prev] || 0) - (outSwap[prev] || 0),
+          outK: (firstOut[d] || 0) - (outSwap[d] || 0),
+          outC: (retIn[d] || 0) + (outSwap[d] || 0)
         };
       }
       ciqFetchHolidays(year).then(holidays => resolve({ year, month, mm, lastDay, days, holidays }));
