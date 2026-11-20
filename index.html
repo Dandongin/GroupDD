@@ -2910,11 +2910,6 @@ function addTeam(name="", pattern="ROUND", nights="", price="", memo="", isSplit
     <div class="team-head">
       <input type="text" class="teamName" placeholder="단체명" value="${esc(name)}" style="max-width:160px; font-weight:bold;">
       <label style="display:inline-flex; align-items:center; gap:4px; margin:0; font-weight:bold; white-space:nowrap;" title="출발일을 바꾸고 저장하면 해당 날짜로 내용이 그대로 이동됩니다">출발일 <input type="date" class="teamDate" value="${esc(selectedDate)}" style="width:140px;"></label>
-      <select class="teamOrigin" style="width:auto; max-width:130px;" title="한국 출발 편도 중국 단체처럼 요일과 다른 경우 직접 지정">
-        <option value="" ${!("")?'selected':''}>단체 국적</option>
-        <option value="K" ${("")==='K'?'selected':''}>🇰🇷 한국 단체</option>
-        <option value="C" ${("")==='C'?'selected':''}>🇨🇳 중국 단체</option>
-      </select>
       <select class="teamPattern" style="max-width:180px;" onchange="togglePatternUI('${teamId}')">
         <option value="ROUND" ${_p==='ROUND'?'selected':''}>🔄 왕복 </option>
         <option value="ONEWAY_OUT" ${_p==='ONEWAY_OUT'?'selected':''}>➡️ 편도 </option>
@@ -2928,6 +2923,11 @@ function addTeam(name="", pattern="ROUND", nights="", price="", memo="", isSplit
       <input type="text" class="teamPrice" placeholder="금액" value="${esc(price)}" style="max-width:90px;">
 
       ${buildSpecialNoteHTML(specialNote)}
+      <select class="teamOrigin" style="width:auto; max-width:130px;" title="한국 출발 편도 중국 단체처럼 요일과 다른 경우 직접 지정">
+        <option value="" ${!("")?'selected':''}>단체 국적</option>
+        <option value="K" ${("")==='K'?'selected':''}>🇰🇷 한국 단체</option>
+        <option value="C" ${("")==='C'?'selected':''}>🇨🇳 중국 단체</option>
+      </select>
 
       <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; margin:0; font-weight:bold; color:#1769aa;">
         <input type="checkbox" class="splitRoomCheck" onchange="toggleRoomSplitUI('${teamId}')" ${isSplitRoom?'checked':''}> 입/출국 분리
@@ -3039,11 +3039,6 @@ function restoreTeamUI(teamData){
     <div class="team-head">
       <input type="text" class="teamName" placeholder="단체명" value="${esc(teamData.name)}" style="max-width:160px; font-weight:bold;">
       <label style="display:inline-flex; align-items:center; gap:4px; margin:0; font-weight:bold; white-space:nowrap;" title="출발일을 바꾸고 저장하면 해당 날짜로 내용이 그대로 이동됩니다">출발일 <input type="date" class="teamDate" value="${esc(selectedDate)}" style="width:140px;"></label>
-      <select class="teamOrigin" style="width:auto; max-width:130px;" title="한국 출발 편도 중국 단체처럼 요일과 다른 경우 직접 지정">
-        <option value="" ${!(teamData.origin)?'selected':''}>구분 자동(요일)</option>
-        <option value="K" ${(teamData.origin)==='K'?'selected':''}>🇰🇷 한국 단체</option>
-        <option value="C" ${(teamData.origin)==='C'?'selected':''}>🇨🇳 중국 단체</option>
-      </select>
       <select class="teamPattern" style="max-width:180px;" onchange="togglePatternUI('${teamId}')">
         <option value="ROUND" ${_p==='ROUND'?'selected':''}>🔄 왕복 </option>
         <option value="ONEWAY_OUT" ${_p==='ONEWAY_OUT'?'selected':''}>➡️ 편도 </option>
@@ -3057,6 +3052,11 @@ function restoreTeamUI(teamData){
       <input type="text" class="teamPrice" placeholder="금액" value="${esc(teamData.price||'')}" style="max-width:90px;">
 
       ${buildSpecialNoteHTML(specialNote)}
+      <select class="teamOrigin" style="width:auto; max-width:130px;" title="한국 출발 편도 중국 단체처럼 요일과 다른 경우 직접 지정">
+        <option value="" ${!(teamData.origin)?'selected':''}>단체 국적</option>
+        <option value="K" ${(teamData.origin)==='K'?'selected':''}>🇰🇷 한국 단체</option>
+        <option value="C" ${(teamData.origin)==='C'?'selected':''}>🇨🇳 중국 단체</option>
+      </select>
 
       <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; margin:0; font-weight:bold; color:#1769aa;">
         <input type="checkbox" class="splitRoomCheck" onchange="toggleRoomSplitUI('${teamId}')" ${isSplit?'checked':''}> 입/출국 객실 분리
