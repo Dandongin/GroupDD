@@ -2911,7 +2911,7 @@ function addTeam(name="", pattern="ROUND", nights="", price="", memo="", isSplit
       <input type="text" class="teamName" placeholder="단체명" value="${esc(name)}" style="max-width:160px; font-weight:bold;">
       <label style="display:inline-flex; align-items:center; gap:4px; margin:0; font-weight:bold; white-space:nowrap;" title="출발일을 바꾸고 저장하면 해당 날짜로 내용이 그대로 이동됩니다">출발일 <input type="date" class="teamDate" value="${esc(selectedDate)}" style="width:140px;"></label>
       <select class="teamOrigin" style="width:auto; max-width:130px;" title="한국 출발 편도 중국 단체처럼 요일과 다른 경우 직접 지정">
-        <option value="" ${!("")?'selected':''}>구분 자동(요일)</option>
+        <option value="" ${!("")?'selected':''}>단체 국적</option>
         <option value="K" ${("")==='K'?'selected':''}>🇰🇷 한국 단체</option>
         <option value="C" ${("")==='C'?'selected':''}>🇨🇳 중국 단체</option>
       </select>
