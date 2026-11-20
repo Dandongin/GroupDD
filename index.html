@@ -2870,11 +2870,25 @@ function getDefaultCapByKey(key) {
   return masterRooms[key]?.defaultCapPerRoom || 4;
 }
 
+/* ===== 단체별 최초 저장 일시 표시 / 단체별 출발일 변경 ===== */
+function fmtCreatedAt(ms, legacy){
+  const n = parseInt(ms, 10);
+  if(!n) return legacy ? "기록 없음 (이번 저장부터 기록)" : "저장 전";
+  const d = new Date(n);
+  const p2 = v => String(v).padStart(2, '0');
+  return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+}
+function refreshTeamCreatedLabel(card){
+  const el = card.querySelector(".teamCreatedInfo");
+  if(el) el.textContent = "🕒 최초 저장: " + fmtCreatedAt(card.dataset.createdAt, card.dataset.legacy === "1");
+}
+
 function addTeam(name="", pattern="ROUND", nights="", price="", memo="", isSplitRoom=false, specialNote=""){
   const teamId = "team_" + (teamSeq++);
   const teamDiv = document.createElement("div");
   teamDiv.className = "team-card";
   teamDiv.id = teamId;
+  teamDiv.dataset.createdAt = "";
   const _p = normalizePattern(pattern);
   
   const defaultNights = getDefaultNightsByDate(selectedDate);
@@ -2883,6 +2897,7 @@ function addTeam(name="", pattern="ROUND", nights="", price="", memo="", isSplit
   teamDiv.innerHTML = `
     <div class="team-head">
       <input type="text" class="teamName" placeholder="단체명" value="${esc(name)}" style="max-width:160px; font-weight:bold;">
+      <label style="display:inline-flex; align-items:center; gap:4px; margin:0; font-weight:bold; white-space:nowrap;" title="출발일을 바꾸고 저장하면 해당 날짜로 내용이 그대로 이동됩니다">출발일 <input type="date" class="teamDate" value="${esc(selectedDate)}" style="width:140px;"></label>
       <select class="teamPattern" style="max-width:180px;" onchange="togglePatternUI('${teamId}')">
         <option value="ROUND" ${_p==='ROUND'?'selected':''}>🔄 왕복 </option>
         <option value="ONEWAY_OUT" ${_p==='ONEWAY_OUT'?'selected':''}>➡️ 편도 </option>
@@ -2903,6 +2918,7 @@ function addTeam(name="", pattern="ROUND", nights="", price="", memo="", isSplit
 
       <button class="danger" type="button" onclick="document.getElementById('${teamId}').remove()" style="margin-left:auto;">삭제</button>
     </div>
+    <div class="teamCreatedInfo" style="font-size:12px; color:#5c6673; margin-bottom:6px;"></div>
     <div style="margin-bottom:10px;">
       <textarea class="teamMemo" placeholder="단체 메모 " rows="1">${esc(memo)}</textarea>
     </div>
@@ -2923,6 +2939,7 @@ function addTeam(name="", pattern="ROUND", nights="", price="", memo="", isSplit
     </div>
   `;
   document.getElementById("teamsContainer").appendChild(teamDiv);
+  refreshTeamCreatedLabel(teamDiv);
   
   if(!isSplitRoom) {
     addRoomTypeToTeam(teamId, "roomTypesContainer", "6", "");
@@ -2992,6 +3009,8 @@ function restoreTeamUI(teamData){
   const teamDiv = document.createElement("div");
   teamDiv.className = "team-card";
   teamDiv.id = teamId;
+  teamDiv.dataset.createdAt = teamData.createdAt || "";
+  if(!teamData.createdAt) teamDiv.dataset.legacy = "1";
   const isSplit = teamData.isSplitRoom || false;
   const specialNote = teamData.specialNote || (teamData.isRiding ? 'RIDING' : '');
   const _p = normalizePattern(teamData.pattern);
@@ -3002,6 +3021,7 @@ function restoreTeamUI(teamData){
   teamDiv.innerHTML = `
     <div class="team-head">
       <input type="text" class="teamName" placeholder="단체명" value="${esc(teamData.name)}" style="max-width:160px; font-weight:bold;">
+      <label style="display:inline-flex; align-items:center; gap:4px; margin:0; font-weight:bold; white-space:nowrap;" title="출발일을 바꾸고 저장하면 해당 날짜로 내용이 그대로 이동됩니다">출발일 <input type="date" class="teamDate" value="${esc(selectedDate)}" style="width:140px;"></label>
       <select class="teamPattern" style="max-width:180px;" onchange="togglePatternUI('${teamId}')">
         <option value="ROUND" ${_p==='ROUND'?'selected':''}>🔄 왕복 </option>
         <option value="ONEWAY_OUT" ${_p==='ONEWAY_OUT'?'selected':''}>➡️ 편도 </option>
@@ -3022,6 +3042,7 @@ function restoreTeamUI(teamData){
 
       <button class="danger" type="button" onclick="document.getElementById('${teamId}').remove()" style="margin-left:auto;">삭제</button>
     </div>
+    <div class="teamCreatedInfo" style="font-size:12px; color:#5c6673; margin-bottom:6px;"></div>
     <div style="margin-bottom:10px;">
       <textarea class="teamMemo" placeholder="단체 메모" rows="1">${esc(teamData.memo||'')}</textarea>
     </div>
@@ -3042,6 +3063,7 @@ function restoreTeamUI(teamData){
     </div>
   `;
   document.getElementById("teamsContainer").appendChild(teamDiv);
+  refreshTeamCreatedLabel(teamDiv);
 
   if(!isSplit) {
     if(teamData.allocations){
@@ -3125,6 +3147,8 @@ function runSimulation(shouldSave = true){
   const teamCards = [...document.querySelectorAll("#teamsContainer .team-card")];
 
   let todayTeams = [];
+  let todayTeamCards = [];   // todayTeams 와 같은 순서의 카드(최초 저장 일시 표시 갱신용)
+  let movedTeams = [];       // 출발일을 다른 날짜로 바꾼 단체 { date, team, card }
   let groupRoomUsed = { "6": 0, "4": 0, "2": 0, "dadami24": 0, "dadami36": 0 };
   let groupPeopleUsed = { "6": 0, "4": 0, "2": 0, "dadami24": 0, "dadami36": 0 };
 
@@ -3140,6 +3164,8 @@ function runSimulation(shouldSave = true){
     const isSplitRoom = card.querySelector(".splitRoomCheck").checked;
     const specialNote = card.querySelector(".spn-wrap").dataset.value || "";
     const isRiding = isRidingNote(specialNote);
+    const teamDate = card.querySelector(".teamDate")?.value || selectedDate;
+    const isMoved = teamDate !== selectedDate;   // 출발일이 바뀐 단체는 오늘 집계에서 제외하고 해당 날짜로 이동
 
     if (!name && !card.querySelector(".assignPeople")?.value) continue;
 
@@ -3160,7 +3186,7 @@ function runSimulation(shouldSave = true){
         return;
       }
       
-      if (pattern === 'ROUND' || pattern === 'ONEWAY_OUT') {
+      if (!isMoved && (pattern === 'ROUND' || pattern === 'ONEWAY_OUT')) {
         allocations.forEach(a => {
           groupRoomUsed[a.key] += a.roomsNeeded;
           groupPeopleUsed[a.key] += a.people;
@@ -3183,7 +3209,7 @@ function runSimulation(shouldSave = true){
         return;
       }
 
-      if (pattern === 'ROUND' || pattern === 'ONEWAY_OUT') {
+      if (!isMoved && (pattern === 'ROUND' || pattern === 'ONEWAY_OUT')) {
         outAllocations.forEach(a => {
           groupRoomUsed[a.key] += a.roomsNeeded;
           groupPeopleUsed[a.key] += a.people;
@@ -3191,8 +3217,9 @@ function runSimulation(shouldSave = true){
       }
     }
 
-    const returnDate = getReturnDate(selectedDate, nights);
-    const selShort = formatShortDate(selectedDate);
+    const baseDate = isMoved ? teamDate : selectedDate;
+    const returnDate = getReturnDate(baseDate, nights);
+    const selShort = formatShortDate(baseDate);
     const retShort = formatShortDate(returnDate);
 
     let itineraryStr = "";
@@ -3204,14 +3231,21 @@ function runSimulation(shouldSave = true){
       itineraryStr = `입국: ${selShort} (편도)`;
     }
 
-    todayTeams.push({
+    const teamObj = {
       name: name || `단체 ${idx+1}`,
       pattern, nights, price, memo, isSplitRoom, isRiding, specialNote,
       totalPeople: teamTotalPeople,
       allocations, outAllocations, inAllocations,
       itineraryStr, returnDate,
+      createdAt: parseInt(card.dataset.createdAt, 10) || (shouldSave ? Date.now() : 0),
       isReturnOnTarget: false
-    });
+    };
+    if (isMoved) {
+      movedTeams.push({ date: teamDate, team: teamObj, card });
+    } else {
+      todayTeams.push(teamObj);
+      todayTeamCards.push(card);
+    }
   }
 
   linkedReturnTeams.forEach(t => {
@@ -3382,7 +3416,7 @@ function runSimulation(shouldSave = true){
 
   if(shouldSave && cnBlock()) return;
   if(shouldSave && db && selectedDate){
-    db.collection("schedules").doc(selectedDate).set({
+    const saveCurrentDate = () => db.collection("schedules").doc(selectedDate).set({
       totalPeople: grandTotalPeople,
       groupTotalPeople: groupTotalPeople,
       teamCount: todayTeams.length,
@@ -3390,10 +3424,50 @@ function runSimulation(shouldSave = true){
       teams: todayTeams,
       updatedAt: new Date()
     }).then(() => {
-      alert(`[${selectedDate}] 일정 정보가 저장되었습니다.`);
+      // 최초 저장 일시 표시 반영
+      todayTeamCards.forEach((c, i) => {
+        if(!c.dataset.createdAt) c.dataset.createdAt = String(todayTeams[i].createdAt);
+        refreshTeamCreatedLabel(c);
+      });
+      let msg = `[${selectedDate}] 일정 정보가 저장되었습니다.`;
+      if(movedTeams.length){
+        const lines = movedTeams.map(m => `- ${m.team.name} → ${m.date}`);
+        msg += `\n\n출발일이 변경된 단체를 해당 날짜로 이동했습니다.\n` + lines.join("\n");
+        movedTeams.forEach(m => m.card.remove());
+      }
+      alert(msg);
       if(calendar) calendar.refetchEvents();
     }).catch(err => { alert("저장 실패: " + err); });
+
+    if(movedTeams.length){
+      // 이동 대상 날짜에 먼저 반영한 뒤 현재 날짜를 저장 (중간에 실패해도 단체가 사라지지 않도록)
+      moveTeamsToDates(movedTeams).then(saveCurrentDate).catch(err => { alert("날짜 이동 저장 실패: " + err); });
+    } else {
+      saveCurrentDate();
+    }
   }
+}
+
+// 출발일이 바뀐 단체를 해당 날짜 문서의 teams 에 그대로 추가 (기존 단체·객실 설정은 유지)
+function moveTeamsToDates(moved){
+  const byDate = {};
+  moved.forEach(m => { (byDate[m.date] = byDate[m.date] || []).push(m.team); });
+  const outPeople = t => t.isSplitRoom ? (t.outAllocations || []).reduce((s, a) => s + (a.people || 0), 0) : (t.totalPeople || 0);
+  return Promise.all(Object.keys(byDate).map(dateStr => {
+    const ref = db.collection("schedules").doc(dateStr);
+    return ref.get().then(doc => {
+      const old = doc.exists ? doc.data() : {};
+      const teams = (old.teams || []).concat(byDate[dateStr]);
+      const add = byDate[dateStr].reduce((s, t) => s + outPeople(t), 0);
+      return ref.set({
+        totalPeople: (parseInt(old.totalPeople, 10) || 0) + add,
+        groupTotalPeople: (parseInt(old.groupTotalPeople, 10) || 0) + add,
+        teamCount: teams.length,
+        teams: teams,
+        updatedAt: new Date()
+      }, { merge: true });
+    });
+  }));
 }
 
 function deleteDateData(){
