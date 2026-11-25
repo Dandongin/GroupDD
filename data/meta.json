@@ -1,10 +1,10 @@
 {
-  "syncedAt": "2026-11-25T03:37:34.766Z",
+  "syncedAt": "2026-11-25T13:27:17.332Z",
   "lastFullAt": "2026-11-24T20:22:28.727Z",
   "counts": {
     "settings": 1,
     "notice": 0,
-    "schedules": 221,
+    "schedules": 222,
     "custom_events": 60
   }
 }
