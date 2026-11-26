@@ -4081,11 +4081,12 @@ async function statsLoadHolidayMap(year, lang){
 
 const WEEKDAYS_ZH = ['周日','周一','周二','周三','周四','周五','周六'];
 const STATS_ZH_KR_COLOR = "#1565c0";
-const STATS_ZH_CN_COLOR = "#7b1fa2";   // 중국 단체 색상 (이미지·엑셀 공통, 일요일/공휴일 빨강과 구분되는 보라)
-// 월 통계 이미지: 일요일/공휴일 날짜는 빨강, 중국 단체는 빨강과 겹치지 않도록 보라(엑셀과 동일)
+const STATS_ZH_CN_COLOR = "#d32f2f";
+// 월 통계 이미지: 중국 단체는 기존 빨강(엑셀과 동일), 일요일·공휴일 날짜는 빨강/파랑과 구분되는 주황
 const STATS_IMG_CN_COLOR = STATS_ZH_CN_COLOR;
-const STATS_IMG_CN_BG = "#f3e5f5";
-const STATS_IMG_HOLIDAY_COLOR = "#d32f2f";
+const STATS_IMG_CN_BG = "#ffebee";
+const STATS_IMG_HOLIDAY_COLOR = "#ef6c00";
+const STATS_IMG_SUNDAY_COLOR = "#ef6c00";
 
 function buildStatsTableHtmlKC(data, lang){
   const isZh = (lang === "zh");
@@ -4114,8 +4115,8 @@ function buildStatsTableHtmlKC(data, lang){
       const d = new Date(dateStr);
       txt = `${d.getMonth() + 1}-${d.getDate()}<br>(${WEEKDAYS_ZH[d.getDay()]})`;
     }
-    // 일요일/공휴일 날짜는 빨간색
-    if (isSun || isHol) txt = `<span style="color:${STATS_IMG_HOLIDAY_COLOR};">${txt}</span>`;
+    // 일요일·공휴일 날짜는 주황색(굵게)
+    if (isHol || isSun) txt = `<span style="color:${STATS_IMG_HOLIDAY_COLOR};font-weight:bold;">${txt}</span>`;
     return txt + holHtml(dateStr);
   };
 
